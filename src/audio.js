@@ -11,6 +11,22 @@ function getAudioContext() {
   return audioCtx;
 }
 
+// Unlock AudioContext on first user gesture (fixes Chrome/Safari autoplay policy)
+export function unlockAudio() {
+  try {
+    const ctx = getAudioContext();
+    // Play a silent buffer to wake up the audio context
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+    if (ctx.state === 'suspended') ctx.resume();
+  } catch (e) {
+    console.warn('Audio unlock failed:', e);
+  }
+}
+
 // Helper to create a noise buffer for white noise synthesis
 let noiseBuffer = null;
 function getNoiseBuffer(ctx) {

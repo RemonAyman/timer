@@ -5,16 +5,22 @@ import {
 } from 'lucide-react';
 import {
   playTick, playWarning, startAlarm, stopAlarm,
-  playDuckQuack, playAirHorn, playLaser, playBuzzer, playFanfare
+  playDuckQuack, playAirHorn, playLaser, playBuzzer, playFanfare,
+  unlockAudio
 } from './audio.js';
 import './index.css';
 
 const PRESETS = [
+  { label: '5s',  seconds: 5 },
+  { label: '10s', seconds: 10 },
+  { label: '15s', seconds: 15 },
+  { label: '20s', seconds: 20 },
+  { label: '25s', seconds: 25 },
   { label: '30s', seconds: 30 },
-  { label: '1m', seconds: 60 },
-  { label: '2m', seconds: 120 },
-  { label: '3m', seconds: 180 },
-  { label: '5m', seconds: 300 },
+  { label: '1m',  seconds: 60 },
+  { label: '2m',  seconds: 120 },
+  { label: '3m',  seconds: 180 },
+  { label: '5m',  seconds: 300 },
   { label: '10m', seconds: 600 },
   { label: '15m', seconds: 900 },
   { label: '20m', seconds: 1200 },
@@ -49,12 +55,31 @@ export default function App() {
   const [tickEnabled, setTickEnabled] = useState(true);
   const [warningEnabled, setWarningEnabled] = useState(true);
   const [alarmEnabled, setAlarmEnabled] = useState(true);
-  const [activePreset, setActivePreset] = useState(1);
+  const [activePreset, setActivePreset] = useState(7); // default 5m
   const [activeSoundBtn, setActiveSoundBtn] = useState(null);
   const [warningFired, setWarningFired] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
 
   const appContainerRef = useRef(null);
   const intervalRef = useRef(null);
+
+  // Unlock audio on first user interaction (fixes autoplay policy on all browsers)
+  useEffect(() => {
+    const unlock = () => {
+      if (!audioUnlocked) {
+        unlockAudio();
+        setAudioUnlocked(true);
+      }
+    };
+    window.addEventListener('click', unlock, { once: true });
+    window.addEventListener('touchstart', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('click', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, [audioUnlocked]);
 
   // Sync display inputs with remaining time when paused
   const displayH = Math.floor(remaining / 3600);
