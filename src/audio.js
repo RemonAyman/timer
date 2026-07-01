@@ -149,66 +149,80 @@ export function stopAlarm() {
   alarmOscillators = [];
 }
 
-// 4. Soundboard: Duck Quack (صوت بطة)
+// 4. Soundboard: Duck Quack (صوت بطة حقيقية)
+// Uses 3-formant vocal tract modeling (F1, F2, F3) + pitch vibrato + two overlapping quacks
 export function playDuckQuack() {
   try {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
-    
-    // Duck quack is synthesized using a sawtooth wave and a sweeping bandpass filter with high resonance (Q)
-    const osc = ctx.createOscillator();
-    const filter = ctx.createBiquadFilter();
-    const gainNode = ctx.createGain();
-    
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(170, now); // Nasal base frequency
-    // Pitch sweep
-    osc.frequency.linearRampToValueAtTime(190, now + 0.05);
-    osc.frequency.exponentialRampToValueAtTime(140, now + 0.2);
-    
-    filter.type = 'bandpass';
-    filter.Q.value = 4.0; // High resonance to mimic vocal tract
-    filter.frequency.setValueAtTime(400, now);
-    filter.frequency.exponentialRampToValueAtTime(1200, now + 0.06);
-    filter.frequency.exponentialRampToValueAtTime(300, now + 0.22);
-    
-    gainNode.gain.setValueAtTime(0.01, now);
-    gainNode.gain.linearRampToValueAtTime(0.25, now + 0.03); // Fast attack
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.25); // Release
-    
-    osc.connect(filter);
-    filter.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    
-    osc.start(now);
-    osc.stop(now + 0.28);
-    
-    // Play a secondary micro-quack immediately after to sound realistic
-    const delay = 0.08;
-    const osc2 = ctx.createOscillator();
-    const filter2 = ctx.createBiquadFilter();
-    const gain2 = ctx.createGain();
-    
-    osc2.type = 'sawtooth';
-    osc2.frequency.setValueAtTime(160, now + delay);
-    osc2.frequency.exponentialRampToValueAtTime(130, now + delay + 0.15);
-    
-    filter2.type = 'bandpass';
-    filter2.Q.value = 3.5;
-    filter2.frequency.setValueAtTime(450, now + delay);
-    filter2.frequency.exponentialRampToValueAtTime(1000, now + delay + 0.05);
-    filter2.frequency.exponentialRampToValueAtTime(350, now + delay + 0.18);
-    
-    gain2.gain.setValueAtTime(0.01, now + delay);
-    gain2.gain.linearRampToValueAtTime(0.2, now + delay + 0.02);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.2);
-    
-    osc2.connect(filter2);
-    filter2.connect(gain2);
-    gain2.connect(ctx.destination);
-    
-    osc2.start(now + delay);
-    osc2.stop(now + delay + 0.22);
+
+    // ── Helper: one realistic quack syllable ──────────────────────────────
+    function quack(startTime, pitchHz, durationSec, vol = 0.28) {
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.001, startTime);
+      masterGain.gain.linearRampToValueAtTime(vol, startTime + 0.015);          // sharp attack
+      masterGain.gain.setValueAtTime(vol * 0.85, startTime + durationSec * 0.3);
+      masterGain.gain.exponentialRampToValueAtTime(0.001, startTime + durationSec); // release
+      masterGain.connect(ctx.destination);
+
+      // Source: sawtooth (rich harmonics like a duck's syrinx)
+      const src = ctx.createOscillator();
+      src.type = 'sawtooth';
+      src.frequency.setValueAtTime(pitchHz * 1.08, startTime);
+      src.frequency.linearRampToValueAtTime(pitchHz, startTime + 0.02);
+      // Natural pitch droop at end
+      src.frequency.setValueAtTime(pitchHz, startTime + durationSec * 0.55);
+      src.frequency.exponentialRampToValueAtTime(pitchHz * 0.80, startTime + durationSec);
+
+      // Vibrato (duck's natural quiver ~12 Hz)
+      const vib = ctx.createOscillator();
+      const vibGain = ctx.createGain();
+      vib.frequency.value = 12;
+      vibGain.gain.value = pitchHz * 0.03;
+      vib.connect(vibGain);
+      vibGain.connect(src.frequency);
+
+      // Formant 1 – low nasal resonance (~700 Hz)
+      const f1 = ctx.createBiquadFilter();
+      f1.type = 'bandpass';
+      f1.frequency.setValueAtTime(700,  startTime);
+      f1.frequency.linearRampToValueAtTime(500, startTime + durationSec);
+      f1.Q.value = 6;
+
+      // Formant 2 – main "quack" character (~1800 Hz)
+      const f2 = ctx.createBiquadFilter();
+      f2.type = 'bandpass';
+      f2.frequency.setValueAtTime(1000, startTime);
+      f2.frequency.linearRampToValueAtTime(2000, startTime + 0.05);
+      f2.frequency.exponentialRampToValueAtTime(900, startTime + durationSec);
+      f2.Q.value = 8;
+
+      // Formant 3 – bright edge (~3200 Hz)
+      const f3 = ctx.createBiquadFilter();
+      f3.type = 'bandpass';
+      f3.frequency.setValueAtTime(3200, startTime);
+      f3.frequency.linearRampToValueAtTime(2800, startTime + durationSec);
+      f3.Q.value = 5;
+
+      // Mix the three formant paths
+      const mix = ctx.createGain();
+      mix.gain.value = 1;
+
+      src.connect(f1); f1.connect(mix);
+      src.connect(f2); f2.connect(mix);
+      src.connect(f3); f3.connect(mix);
+      mix.connect(masterGain);
+
+      vib.start(startTime);
+      src.start(startTime);
+      vib.stop(startTime + durationSec + 0.05);
+      src.stop(startTime + durationSec + 0.05);
+    }
+
+    // ── Two overlapping quack syllables (QUACK-ack!) ──────────────────────
+    quack(now,        185, 0.30, 0.30);   // main loud quack
+    quack(now + 0.22, 165, 0.22, 0.18);  // softer echo quack
+
   } catch (e) {
     console.error('Duck sound failed:', e);
   }
